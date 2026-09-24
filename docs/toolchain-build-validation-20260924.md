@@ -1,10 +1,10 @@
 # Toolchain build validation — 2026-09-24
 
-**Result: partially validated.** The official GCC-only image build finished, and the installed compiler works. LLVM was not compiled in this run.
+**Result: both single-compiler paths validated.** Each official entrypoint finished as its own image. A combined GCC+LLVM image (`BUILD_GCC=1 BUILD_LLVM=1` in one build) was not run.
 
-`BUILD_LLVM=0 JOBS=4 bash scripts/build-toolchains.sh` exited 0. The image `yarpgen-toolchains:latest` (`sha256:e24f5e0dc596`, about 2.0 GiB) contains GCC 14.2.0 under `/opt/gcc` and `/opt/yarpgen-compilers.json` whose `cc`/`cxx` paths are those binaries. A one-test campaign inside the image, using that fragment, was `tested=1 ok=1 failures=0`.
+GCC-only, first: `BUILD_LLVM=0 JOBS=4 bash scripts/build-toolchains.sh` exited 0. That image was `sha256:e24f5e0dc596` (about 2.0 GiB) with GCC 14.2.0 under `/opt/gcc`. A one-test campaign was `tested=1 ok=1 failures=0`.
 
-The dual GCC+LLVM image was not built. The LLVM 18.1.8 tarball URL answers HTTP 200 (132,067,260 bytes). `BUILD_LLVM=0` skipped download, cmake, and ninja for LLVM, which is the documented single-compiler path. Disk on this VM could have held a second build; it was not started.
+LLVM-only, later the same day: `BUILD_GCC=0 JOBS=4 bash scripts/build-toolchains.sh` also exited 0. Details are in the LLVM section below. The default tag `yarpgen-toolchains:latest` now points at the LLVM image because the script always tags that name. The GCC image id above is unchanged.
 
 ## Static checks
 
@@ -99,7 +99,61 @@ done tested=1 ok=1 failures=0 store=/tmp/camp
 
 ## Caveats
 
-- LLVM 18.1.8 was not configured or compiled. A full dual build is still the default of `scripts/build-toolchains.sh` (`BUILD_GCC=1 BUILD_LLVM=1`) and was not executed here.
+- A single image containing both `/opt/gcc` and `/opt/llvm` was not built. The default `scripts/build-toolchains.sh` (both compilers, `JOBS` default 4) is still unrun. Each compiler was built by skipping the other.
 - `lto-plugin/configure` printed `/usr/bin/file: No such file or directory`. The build continued, and `/opt/gcc/libexec/gcc/x86_64-pc-linux-gnu/14.2.0/liblto_plugin.so` is present. Campaigns in this tree do not enable LTO. The `file` package is not installed in the image.
 - On a normal host, Docker's overlay driver is enough. This nested VM needed `fuse-overlayfs`.
 - The legacy builder warning is from Docker 29 without the buildx plugin. The build completed with that builder.
+
+## LLVM-only build
+
+Same daemon as the GCC run: Docker 29.1.3, `storage-driver: fuse-overlayfs`, containerd snapshotter off. No LLVM-specific script change was required. `docker/build-inside.sh` configured and installed Clang as written.
+
+```
+BUILD_GCC=0 JOBS=4 bash scripts/build-toolchains.sh
+```
+
+| | |
+| --- | --- |
+| Start | 2026-09-24T20:05:02Z |
+| End | 2026-09-24T20:44:10Z |
+| Wall time | 39m 8s |
+| Exit | 0 |
+| Image | `yarpgen-toolchains:latest`, id `sha256:068dc5a015e349c60f62d297a95febb8d3752e548b8ccb26e8b71f26b8a9dfe0`, size 3,521,991,954 bytes |
+| Configure | Clang 18.1.8, Ninja, `CMAKE_INSTALL_PREFIX=/opt/llvm`, `LLVM_ENABLE_PROJECTS=clang`, `LLVM_TARGETS_TO_BUILD=X86`, `LLVM_ENABLE_ASSERTIONS=ON`, tests and benchmarks off |
+| Ninja | 3722 steps, then install |
+
+The log records `Clang version: 18.1.8`, `Build files have been written to: /tmp/llvm-build`, `wrote /opt/yarpgen-compilers.json`, and `Successfully tagged yarpgen-toolchains:latest`. `/opt/gcc/bin/gcc` is absent. `/usr/bin/gcc` is still the distro compiler from `build-essential`, which the image uses to compile LLVM. It is not listed in the compilers fragment.
+
+### Installed Clang
+
+```
+clang version 18.1.8
+Target: x86_64-unknown-linux-gnu
+InstalledDir: /opt/llvm/bin
+```
+
+`clang++` prints the same version and install dir. `command -v` resolves both to `/opt/llvm/bin/clang` and `/opt/llvm/bin/clang++`.
+
+Tiny programs (`int main` returning 0), compiled `-O2` and executed in the image: C exit 0, C++ exit 0. The C binary links only libc. The C++ binary loads the distro `/lib/x86_64-linux-gnu/libstdc++.so.6`, which is expected when `/opt/gcc` was not built.
+
+`/opt/yarpgen-compilers.json` lists only the Clang entries, and both paths are executable:
+
+```
+names ['clang-O0', 'clang-O3']
+clang-O0 cc /opt/llvm/bin/clang executable=True
+clang-O0 cxx /opt/llvm/bin/clang++ executable=True
+clang-O3 cc /opt/llvm/bin/clang executable=True
+clang-O3 cxx /opt/llvm/bin/clang++ executable=True
+gcc_present False
+only_clang True
+match
+```
+
+One campaign test, no source mount, that config:
+
+```
+python3 -m yarpgen.campaign --config /opt/yarpgen-compilers.json --tests 1 --profile tiny --lang both --out /tmp/camp --seed 7
+done tested=1 ok=1 failures=0 store=/tmp/camp
+```
+
+The wrapper's closing line still says `Compilers: /opt/gcc/bin and /opt/llvm/bin` even when GCC was skipped. The install itself did not create `/opt/gcc`.
