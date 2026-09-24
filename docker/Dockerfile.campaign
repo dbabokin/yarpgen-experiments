@@ -1,0 +1,14 @@
+# Campaign image that uses the distro compilers. Use Dockerfile.toolchains
+# when the campaign should run on compilers built from source.
+FROM ubuntu:24.04
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 gcc g++ clang make ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/yarpgen
+COPY yarpgen ./yarpgen
+COPY campaign ./campaign
+COPY scripts ./scripts
+
+CMD ["python3", "-m", "yarpgen.campaign", "--config", "campaign/example-config.json", "--out", "/results"]

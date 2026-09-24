@@ -1,0 +1,38 @@
+# Fresh GCC and LLVM, installed under /opt/gcc and /opt/llvm.
+#
+# This image is intentionally large. A full build needs on the order of
+# 40 GB of disk and a long wall-clock time. Assertions are enabled in LLVM
+# because that is the configuration that surfaces the most compiler crashes.
+#
+#   docker build -f docker/Dockerfile.toolchains -t yarpgen-toolchains .
+#   docker build -f docker/Dockerfile.toolchains --build-arg BUILD_LLVM=0 -t yarpgen-gcc .
+#
+# ARGs:
+#   GCC_VERSION   default 14.2.0
+#   LLVM_VERSION  default 18.1.8
+#   BUILD_GCC     1 or 0
+#   BUILD_LLVM    1 or 0
+#   JOBS          parallel compile jobs
+FROM ubuntu:24.04
+
+ARG GCC_VERSION=14.2.0
+ARG LLVM_VERSION=18.1.8
+ARG BUILD_GCC=1
+ARG BUILD_LLVM=1
+ARG JOBS=4
+
+ENV GCC_VERSION=${GCC_VERSION} \
+    LLVM_VERSION=${LLVM_VERSION} \
+    BUILD_GCC=${BUILD_GCC} \
+    BUILD_LLVM=${BUILD_LLVM} \
+    JOBS=${JOBS} \
+    PATH="/opt/llvm/bin:/opt/gcc/bin:${PATH}"
+
+COPY docker/build-inside.sh /tmp/build-inside.sh
+RUN bash /tmp/build-inside.sh && rm /tmp/build-inside.sh
+
+RUN apt-get update && apt-get install -y --no-install-recommends python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/yarpgen
+CMD ["python3", "-m", "yarpgen.campaign", "--help"]
