@@ -21,12 +21,14 @@ ARG BUILD_GCC=1
 ARG BUILD_LLVM=1
 ARG JOBS=4
 
-ENV GCC_VERSION=${GCC_VERSION} \
+ENV DEBIAN_FRONTEND=noninteractive \
+    GCC_VERSION=${GCC_VERSION} \
     LLVM_VERSION=${LLVM_VERSION} \
     BUILD_GCC=${BUILD_GCC} \
     BUILD_LLVM=${BUILD_LLVM} \
     JOBS=${JOBS} \
-    PATH="/opt/llvm/bin:/opt/gcc/bin:${PATH}"
+    PATH="/opt/llvm/bin:/opt/gcc/bin:${PATH}" \
+    LD_LIBRARY_PATH="/opt/gcc/lib64:/opt/gcc/lib:/opt/llvm/lib"
 
 COPY docker/build-inside.sh /tmp/build-inside.sh
 RUN bash /tmp/build-inside.sh && rm /tmp/build-inside.sh
@@ -34,5 +36,12 @@ RUN bash /tmp/build-inside.sh && rm /tmp/build-inside.sh
 RUN apt-get update && apt-get install -y --no-install-recommends python3 \
     && rm -rf /var/lib/apt/lists/*
 
+# Dockerfile.campaign packages the same tree against distro compilers.
+# Copy it after the toolchain build so a generator change does not rebuild
+# GCC/LLVM. The default command imports that tree; a campaign passes
+# /opt/yarpgen-compilers.json so cc/cxx point at /opt/gcc and /opt/llvm.
 WORKDIR /opt/yarpgen
+COPY yarpgen ./yarpgen
+COPY campaign ./campaign
+COPY scripts ./scripts
 CMD ["python3", "-m", "yarpgen.campaign", "--help"]

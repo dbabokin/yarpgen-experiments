@@ -222,8 +222,13 @@ bash scripts/build-toolchains.sh
 BUILD_LLVM=0 JOBS=8 bash scripts/build-toolchains.sh
 ```
 
-The image puts compilers on `PATH` and writes `/opt/yarpgen-compilers.json`.
-Mount the repo and point the campaign at that fragment:
+The image puts compilers on `PATH`, registers `/opt/gcc/lib64` and
+`/opt/llvm/lib` with the dynamic linker, and writes
+`/opt/yarpgen-compilers.json`. It also contains this tree under
+`/opt/yarpgen` (the same layout as `docker/Dockerfile.campaign`), so the
+default command can import `yarpgen.campaign`. Mount the repo when you want
+the host tree instead of the copy baked into the image. Point the campaign
+at the compiler fragment either way:
 
 ```bash
 docker run --rm -v "$PWD":/src -w /src yarpgen-toolchains \

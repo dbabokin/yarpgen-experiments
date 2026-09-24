@@ -11,9 +11,12 @@ JOBS="${JOBS:-$(nproc)}"
 apt-get update
 apt-get install -y --no-install-recommends \
   build-essential ca-certificates cmake ninja-build python3 \
-  wget xz-utils git flex bison texinfo \
+  wget xz-utils git flex bison texinfo gawk \
   libgmp-dev libmpfr-dev libmpc-dev zlib1g-dev libzstd-dev
 rm -rf /var/lib/apt/lists/*
+
+# Release builds run awk while generating sources. GCC requires GNU awk;
+# Ubuntu's default awk is mawk, which rejects gawk-only functions.
 
 mkdir -p /tmp/src /opt
 
@@ -27,7 +30,8 @@ if [[ "$BUILD_GCC" == "1" ]]; then
     --enable-languages=c,c++ \
     --disable-multilib \
     --disable-bootstrap \
-    --disable-nls
+    --disable-nls \
+    --enable-host-pie
   make -j"$JOBS"
   make install
   cd /
@@ -49,6 +53,28 @@ if [[ "$BUILD_LLVM" == "1" ]]; then
     -DCLANG_ENABLE_ARCMT=OFF
   ninja -C /tmp/llvm-build -j"$JOBS" install
   rm -rf /tmp/llvm-build "/tmp/src/llvm-project-${LLVM_VERSION}.src" /tmp/llvm.tar.xz
+fi
+
+# User binaries do not get an rpath. Register the prefixes so a C++
+# program built by /opt/gcc/bin/g++ can load the libstdc++ just installed.
+lib_conf=/etc/ld.so.conf.d/yarpgen-toolchains.conf
+: >"$lib_conf"
+for dir in /opt/gcc/lib64 /opt/gcc/lib /opt/llvm/lib /opt/llvm/lib/x86_64-unknown-linux-gnu; do
+  if [[ -d "$dir" ]]; then
+    echo "$dir" >>"$lib_conf"
+  fi
+done
+if [[ -s "$lib_conf" ]]; then
+  ldconfig
+fi
+
+if [[ "$BUILD_GCC" == "1" && ! -x /opt/gcc/bin/gcc ]]; then
+  echo "BUILD_GCC=1 but /opt/gcc/bin/gcc is missing" >&2
+  exit 1
+fi
+if [[ "$BUILD_LLVM" == "1" && ! -x /opt/llvm/bin/clang ]]; then
+  echo "BUILD_LLVM=1 but /opt/llvm/bin/clang is missing" >&2
+  exit 1
 fi
 
 python3 - <<'PY'
