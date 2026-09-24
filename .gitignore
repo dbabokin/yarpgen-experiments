@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+results/
+.work/
+*.o
+prog
+.san-bin

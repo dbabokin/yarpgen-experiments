@@ -1,0 +1,20 @@
+{
+  "duration_sec": 3600,
+  "tests": null,
+  "jobs": 1,
+  "lang": "both",
+  "profile": "campaign",
+  "store_dir": "results",
+  "reduce": true,
+  "reduce_budget_sec": 120,
+  "sanitize_all": false,
+  "timeout_compile_sec": 60,
+  "timeout_run_sec": 3,
+  "max_stored_per_fingerprint": 1,
+  "compilers": [
+    {"name": "gcc-O0", "cc": "gcc", "cxx": "g++", "flags": ["-O0"]},
+    {"name": "gcc-O3", "cc": "gcc", "cxx": "g++", "flags": ["-O3"]},
+    {"name": "clang-O0", "cc": "clang", "cxx": "clang++", "flags": ["-O0"]},
+    {"name": "clang-O3", "cc": "clang", "cxx": "clang++", "flags": ["-O3"]}
+  ]
+}
